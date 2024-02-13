@@ -1,0 +1,38 @@
+image: ${CI_DEPENDENCY_PROXY_GROUP_IMAGE_PREFIX}/docker:24.0.5
+
+variables:
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_TLS_CERTDIR: ""
+  KUBE_NAMESPACE: ${CI_PROJECT_NAME}-${CI_PROJECT_ID}-${CI_COMMIT_BRANCH}
+  IMAGE_TAG: registry.ixys.dev/${CI_PROJECT_PATH}
+  IMAGE_TAG_BUILD: $IMAGE_TAG:${CI_COMMIT_REF_NAME}_${CI_COMMIT_SHA}
+  IMAGE_TAG_BRANCH: $IMAGE_TAG:${CI_COMMIT_REF_SLUG}
+  IMAGE_TAG_LATEST: $IMAGE_TAG:latest
+  IMAGE_TAG_ALPINE: $IMAGE_TAG:alpine
+  IMAGE_SCW: rg.fr-par.scw.cloud/registry-ixys-dev/${CI_PROJECT_NAME}
+  IMAGE_SCW_TAG_BUILD: $IMAGE_SCW:${CI_COMMIT_REF_NAME}
+  IMAGE_SCW_TAG_LATEST: $IMAGE_SCW:latest
+
+services:
+  - name: docker:24.0.5-dind
+    command: [ "--tls=false" ]
+
+stages:
+  - ".pre"
+  - build
+  - test
+  - ".post"
+
+build:
+  stage: build
+  before_script:
+    - echo -n $CI_REGISTRY_PASSWORD | docker login registry.ixys.dev -u $CI_REGISTRY_USER --password-stdin
+    - echo -n $SCW_SECRET_KEY | docker login rg.fr-par.scw.cloud/registry-ixys-dev -u nologin --password-stdin
+  script:
+    - docker build --pull --cache-from $IMAGE_TAG_LATEST -t $IMAGE_TAG_BUILD -t $IMAGE_TAG_BRANCH -t $IMAGE_TAG_LATEST -t $IMAGE_SCW_TAG_BUILD -t $IMAGE_SCW_TAG_LATEST -t $CI_REGISTRY_IMAGE .
+    - docker push $IMAGE_TAG --all-tags
+    - docker push $IMAGE_SCW --all-tags
+
+include:
+  - template: Security/Secret-Detection.gitlab-ci.yml
+  - template: Jobs/SAST-IaC.latest.gitlab-ci.yml
