@@ -1,4 +1,4 @@
-FROM php:8.2-fpm-alpine3.19
+FROM php:8.2-fpm-alpine
 # with alpine 3.14 -> ERROR /bin/sh: Operation not permitted
 # uRequired Args ( inherited from start of file, or passed at bild )
 ARG BUILD_DATE
@@ -20,29 +20,32 @@ RUN wget -q -t3 'https://packages.doppler.com/public/cli/rsa.8004D9FF50437357.ke
     echo 'https://packages.doppler.com/public/cli/alpine/any-version/main' | tee -a /etc/apk/repositories && \
     # Install dependencies \
     apk add --no-cache --update \
+            build-base \
             doppler \
-            fcgi \
-            freetds \
-            freetype \
-            gettext \
-            gmp \
-            icu-libs \
+            wget \
+            curl \
+            git \
+            nodejs \
+            npm \
+            vim \
+            grep \
             imagemagick \
             libgd \
             libffi \
             libgmpxx \
             libintl \
             libjpeg-turbo \
-            libmemcached-libs \
-            libpng \
-            libpq \
+            libmcrypt-dev \
+            libxml2-dev \
             libssh2 \
-            libstdc++ \
+            imagemagick-dev \
+            pcre-dev \
             libtool \
-            libxpm \
-            libxslt \
-            libzip \
             make \
+            autoconf \
+            g++ \
+            cyrus-sasl-dev \
+            libgsasl-dev \
             yaml \
             zlib
 
@@ -63,7 +66,6 @@ RUN apk update \
             libc-dev \
             libjpeg-turbo-dev \
             libpng-dev \
-            libmemcached-dev \
             libssh2-dev \
             libwebp-dev \
             libxml2-dev \
@@ -75,81 +77,23 @@ RUN apk update \
             pcre-dev \
             tini \
             yaml-dev \
-            zlib-dev \
- # install general usage packages
- && apk add --no-cache \
-            curl \
-            git \
-            nodejs \
-            npm \
- # PHP Extensions --------------------------------- \
- # Install gd \
- && docker-php-ext-configure gd \
+            zlib-dev
+
+RUN docker-php-ext-configure gd \
             --enable-gd \
             --with-webp \
             --with-jpeg \
             --with-xpm \
             --with-freetype \
             --enable-gd-jis-conv \
- && docker-php-ext-install -j$(nproc) gd \
- && true \
- # Install apcu
- && pecl install apcu \
- && docker-php-ext-enable apcu \
- && true \
- # Install bcmath
- && docker-php-ext-install -j$(nproc) bcmath \
- && true \
-# Install bz2
- && docker-php-ext-install -j$(nproc) bz2 \
- && true \
- # Install ctype
- && docker-php-ext-install -j$(nproc) ctype \
- && true \
- # Install exif
- && docker-php-ext-install -j$(nproc) exif \
- && true \
- # Install intl
- && docker-php-ext-install -j$(nproc) intl \
- && true \
- # Install memcache
- && pecl install memcache \
- && docker-php-ext-enable memcache \
- && true \
- # Install mysqli
- && docker-php-ext-install -j$(nproc) mysqli \
- && true \
- # Install oauth
- && pecl install oauth \
- && docker-php-ext-enable oauth \
- && true \
- # Install opcache
- && docker-php-ext-install -j$(nproc) opcache \
- && true \
- # Install pdo_mysql
- && docker-php-ext-configure pdo_mysql --with-zlib-dir=/usr \
- && docker-php-ext-install -j$(nproc) pdo_mysql \
- && true \
- # Install pdo_dblib
- && docker-php-ext-install -j$(nproc) pdo_dblib \
- && true \
- # Install pcntl
- && docker-php-ext-install -j$(nproc) pcntl \
- && true \
+ && docker-php-ext-install -j$(nproc) gd ctype exif intl mysqli pcntl xml \
  # Install redis
  && pecl install redis \
  && docker-php-ext-enable redis \
- && true \
- # Install xml
- && docker-php-ext-install -j$(nproc) xml \
- && true \
  # Install zip
  && docker-php-ext-configure zip --with-zip \
  && docker-php-ext-install -j$(nproc) zip \
- && true \
  # --------------------------------------------------------------------- \
- # Install Xdebug at this step to make editing dev image cache-friendly, we delete xdebug from production image later \
- # && pecl install xdebug-3.1.3 \
  # CLEANING \
  && apk add --no-network --virtual .php-extensions-rundeps $runDeps \
  && docker-php-source delete \
@@ -159,7 +103,7 @@ RUN apk update \
 
 RUN set -eux \
 # Fix php.ini settings for enabled extensions
-    && chmod +x "$(php -r 'echo ini_get("extension_dir");')"/* \
+#    && chmod +x "$(php -r 'echo ini_get("extension_dir");')"/* \
 # Shrink binaries
     && (find /usr/local/bin -type f -print0 | xargs -n1 -0 strip --strip-all -p 2>/dev/null || true) \
     && (find /usr/local/lib -type f -print0 | xargs -n1 -0 strip --strip-all -p 2>/dev/null || true) \
