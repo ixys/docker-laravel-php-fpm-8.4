@@ -3,7 +3,7 @@ name: Build & Push Docker (Scaleway + GHCR)
 on:
   push:
     branches:
-      - master
+      - main
       - develop
   workflow_dispatch:
 
