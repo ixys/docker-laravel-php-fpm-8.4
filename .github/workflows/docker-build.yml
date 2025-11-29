@@ -10,6 +10,8 @@ on:
     branches:
       - main
       - develop
+  release:
+    types: [published]
   workflow_dispatch:
 
 jobs:
@@ -23,28 +25,33 @@ jobs:
       # "true" sur push, "false" sur PR → utilisé dans le script bash
       PUSH_IMAGES: ${{ github.event_name == 'push' }}
 
+      # On ne push que :
+      # - sur push vers main ou develop
+      # - sur release publiée
+      PUSH_IMAGES: ${{ (github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'develop')) || (github.event_name == 'release' && github.event.action == 'published') }}
+
     permissions:
       contents: read
-      packages: write   # ⬅ nécessaire pour publier sur GHCR
+      packages: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # ---------------------------
-      # LOGIN SCW (uniquement sur push)
+      # LOGIN SCW (uniquement si push)
       # ---------------------------
       - name: Log in to Scaleway Container Registry
-        if: github.event_name == 'push'
+        if: env.PUSH_IMAGES == 'true'
         run: |
           echo "${{ secrets.SCW_SECRET_KEY }}" \
             | docker login $REGISTRY_SCW -u "nologin" --password-stdin
 
       # ---------------------------
-      # LOGIN GHCR (uniquement sur push)
+      # LOGIN GHCR (uniquement si push)
       # ---------------------------
       - name: Log in to GHCR
-        if: github.event_name == 'push'
+        if: env.PUSH_IMAGES == 'true'
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | docker login ghcr.io -u ${{ github.actor }} --password-stdin
@@ -54,21 +61,25 @@ jobs:
           GIT_BRANCH: ${{ github.ref_name }}
           GIT_SHA: ${{ github.sha }}
           PUSH_IMAGES: ${{ env.PUSH_IMAGES }}
+          # utile sur event release, vide sinon
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
 
           echo "Event: $GITHUB_EVENT_NAME"
+          echo "Ref:   $GIT_BRANCH"
           echo "Will push images? $PUSH_IMAGES"
 
           # ---------------------------
-          # Slug branch
+          # Slug branch / tag
+          # (sur release, GIT_BRANCH = tag, ex: v1.2.3)
           # ---------------------------
           BRANCH_SLUG=$(echo "$GIT_BRANCH" \
             | tr '[:upper:]' '[:lower:]' \
             | sed 's/[^a-z0-9_.-]/-/g')
 
           echo "Branch slug: $BRANCH_SLUG"
-          echo "Commit SHA: $GIT_SHA"
+          echo "Commit SHA:  $GIT_SHA"
 
           # ---------------------------
           # Base images
@@ -95,6 +106,12 @@ jobs:
           TAG_SLIM_GHCR_BRANCH="${IMAGE_GHCR}:${BRANCH_SLUG}-slim"
           TAG_SLIM_GHCR_LATEST="${IMAGE_GHCR}:slim"
 
+          # Optionnel : tag spécifique release si on est sur un event release
+          if [ -n "${RELEASE_TAG:-}" ]; then
+            TAG_FULL_SCW_RELEASE="${IMAGE_SCW}:${RELEASE_TAG}"
+            TAG_FULL_GHCR_RELEASE="${IMAGE_GHCR}:${RELEASE_TAG}"
+          fi
+
           # ---------------------------
           # Optional cache
           # ---------------------------
@@ -116,6 +133,8 @@ jobs:
             -t "$TAG_FULL_GHCR_BUILD" \
             -t "$TAG_FULL_GHCR_BRANCH" \
             -t "$TAG_FULL_GHCR_LATEST" \
+            ${TAG_FULL_SCW_RELEASE:+-t "$TAG_FULL_SCW_RELEASE"} \
+            ${TAG_FULL_GHCR_RELEASE:+-t "$TAG_FULL_GHCR_RELEASE"} \
             -f Dockerfile .
 
           # ---------------------------
@@ -134,7 +153,7 @@ jobs:
             -f Dockerfile.slim .
 
           # ============================================================
-          # TESTS SUR L’IMAGE FULL
+          # TESTS SUR L’IMAGE FULL (adaptés à ton Dockerfile base)
           # ============================================================
           echo "Running php-fpm config test on FULL image..."
           docker run --rm \
@@ -151,10 +170,13 @@ jobs:
             --entrypoint php \
             "$TAG_FULL_SCW_BUILD" -m | grep -E 'bcmath|gd|intl|mbstring|pcntl|pdo_mysql|zip|redis'
 
-          echo "Running healthcheck-liveness on FULL image..."
-          docker run --rm \
-            --entrypoint healthcheck-liveness \
-            "$TAG_FULL_SCW_BUILD"
+          echo "Running healthcheck-liveness on FULL image (with running php-fpm)..."
+          FULL_CONTAINER_NAME="test-full-${BRANCH_SLUG}"
+          docker rm -f "$FULL_CONTAINER_NAME" >/dev/null 2>&1 || true
+          docker run -d --name "$FULL_CONTAINER_NAME" "$TAG_FULL_SCW_BUILD"
+          sleep 5
+          docker exec "$FULL_CONTAINER_NAME" healthcheck-liveness
+          docker rm -f "$FULL_CONTAINER_NAME"
 
           # ============================================================
           # (Optionnel) TESTS SUR L’IMAGE SLIM
@@ -164,13 +186,16 @@ jobs:
             --entrypoint php-fpm \
             "$TAG_SLIM_SCW_BUILD" -t
 
-          echo "Running healthcheck-liveness on SLIM image..."
-          docker run --rm \
-            --entrypoint healthcheck-liveness \
-            "$TAG_SLIM_SCW_BUILD"
+          echo "Running healthcheck-liveness on SLIM image (with running php-fpm)..."
+          SLIM_CONTAINER_NAME="test-slim-${BRANCH_SLUG}"
+          docker rm -f "$SLIM_CONTAINER_NAME" >/dev/null 2>&1 || true
+          docker run -d --name "$SLIM_CONTAINER_NAME" "$TAG_SLIM_SCW_BUILD"
+          sleep 5
+          docker exec "$SLIM_CONTAINER_NAME" healthcheck-liveness
+          docker rm -f "$SLIM_CONTAINER_NAME"
 
           # ---------------------------
-          # PUSH (UNIQUEMENT SUR PUSH)
+          # PUSH (SEULEMENT SI PUSH_IMAGES = true)
           # ---------------------------
           if [ "$PUSH_IMAGES" = "true" ]; then
             echo "Pushing images to SCW..."
@@ -179,5 +204,5 @@ jobs:
             echo "Pushing images to GHCR..."
             docker push "$IMAGE_GHCR" --all-tags
           else
-            echo "PR detected → skipping push to registries."
+            echo "Skipping push: not main/develop push or release.published."
           fi
