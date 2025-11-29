@@ -33,7 +33,8 @@ RUN apk add --no-cache \
         libxml2 \
         oniguruma \
         zlib \
-        doppler
+        doppler \
+        fcgi
 
 # ------------------------------ PHP extensions ------------------------------
 RUN apk add --no-cache --virtual .build-deps \

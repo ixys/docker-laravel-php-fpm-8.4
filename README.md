@@ -1,66 +1,127 @@
-# PHP FPM 8.2 based on Alpine 3.19
+# PHP-FPM 8.2 – Alpine (Optimisé pour Laravel)
 
-## Utilisation
+Cette image fournit un environnement PHP-FPM 8.2 léger, rapide et optimisé pour exécuter des applications Laravel en production.
+Elle est basée sur Alpine Linux, inclut Composer, Doppler, et un ensemble minimal mais complet de libs et extensions PHP nécessaires à Laravel.
 
-Pour utiliser l'image depuis le registre public :
+## Installation
+
+Pour récupérer l’image depuis le registry Scaleway :
 ```bash
 docker pull rg.fr-par.scw.cloud/registry-par-ixys/containers/web/php-fpm-8.2:latest
 ```
 
-## PHP Extensions
+Pour la version SLIM :
+```bash
+docker pull rg.fr-par.scw.cloud/registry-par-ixys/containers/web/php-fpm-8.2:slim
+```
 
-| PHP Extensions |
-| --- |
-| bcmath |
-| type |
-| mysqli |
-| intl |
-| pcntl |
-| pdo |
-| pdo_mysql |
-| bz2 |
-| gd |
-| exif |
-| opcache |
-| xml |
-| zip |
+---
+## Fonctionnalités principales
+- Base : php:8.2-fpm-alpine
+- Image SLIM fortement allégée (aucune dépendance inutile en runtime)
+- Configuration PHP & FPM pré-intégrée via /config
+- Extensions PHP compatibles Laravel
+- Support GD complet (JPEG / WEBP / PNG / Freetype)
+- Redis via PECL
+- Doppler CLI pré-installé
+- Optimisée pour K8S (healthchecks, non-root user, entrées custom)
 
-## Libraries
+---
 
-| Standard Libraries |
-| --- |
-| git |
-| composer |
-| apcu |
-| memcached |
-| redis |
-| doppler |
+## Extensions PHP incluses
 
+| Extension | Description |
+|----------|-------------|
+| bcmath | Calculs haute précision |
+| ctype | Requis par Laravel |
+| exif | Métadonnées images |
+| gd | Images (jpeg/webp/png/freetype) |
+| intl | Localisation, formatage |
+| mbstring | Manipulation UTF-8 |
+| pcntl | Tâches / Horizon |
+| pdo | Base PDO |
+| pdo_mysql | MySQL / MariaDB |
+| opcache | Accélération PHP |
+| zip | Compression, storage Laravel |
+| redis (PECL) | Cache/store Redis |
 
-| Specific Libraries |
-| --- |
-| libmemcached-libs |
-| pcre-dev |
-| zlib |
-| tini |
-| gettext |
-| bc |
-| bzip2-dev |
-| curl |
-| freetype-dev |
-| icu-dev |
-| oniguruma-dev |
-| imagemagick-dev |
-| libpng-dev |
-| libjpeg-turbo-dev |
-| libpng-dev |
-| libwebp-dev |
-| libxml2-dev |
-| libzip-dev |
-| mysql-client |
-| nodejs |
-| npm |
-| fcgi |
-| zlib-dev |
-| libmemcached-dev |
-| cyrus-sasl-dev |
+---
+
+## Librairies Système incluses (runtime uniquement)
+
+| Lib | Usage |
+|-----|-------|
+| ca-certificates | HTTPS |
+| curl | Healthchecks, monitoring |
+| bash | Scripts Laravel |
+| git | Deploy, composer private |
+| icu-libs | Required intl |
+| libpng / jpeg / webp / freetype | GD |
+| libzip | zip PHP |
+| oniguruma | mbstring |
+| libxml2 | XML |
+| zlib | zip/pdo |
+
+Aucune lib inutile en production (pas de node, npm, make, gcc, imagemagick, mysql-client, etc.).
+
+---
+
+## Doppler
+
+L’image embarque Doppler CLI pour gérer les secrets K8s ou runtime.
+
+```bash
+doppler secrets download
+```
+
+---
+
+## Utilisation locale
+
+```bash
+docker run --rm -it   -v "$PWD":/app   -p 9000:9000   rg.fr-par.scw.cloud/registry-par-ixys/containers/web/php-fpm-8.2:latest
+```
+
+---
+
+## Variables et configuration
+
+Les fichiers de configuration PHP/FPM sont injectés depuis :
+
+```
+/config/base-*.ini
+/config/prod-*.ini
+/config/fpm/*.conf
+```
+
+---
+
+## Healthcheck
+
+L’image inclut un script :
+
+```
+healthcheck-liveness
+```
+
+---
+
+## Entrypoint
+
+Entrypoint par défaut :
+
+```
+entrypoint-prod
+```
+
+Commande par défaut : `php-fpm`.
+
+---
+
+## Contribution
+
+Toute PR sur l'image Docker doit respecter :
+
+- Un Dockerfile **minimal**, sans dépendences inutiles
+- Pas d’outils de build dans l’image finale
+- Aucune modification sans justification de sécurité/performance

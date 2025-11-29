@@ -6,6 +6,10 @@ on:
       - main
       - develop
       - 'feature/*'
+  pull_request:
+    branches:
+      - main
+      - develop
   workflow_dispatch:
 
 jobs:
@@ -16,6 +20,8 @@ jobs:
       IMAGE_NAME: ${{ github.event.repository.name }}
       REGISTRY_SCW: rg.fr-par.scw.cloud/registry-ixys-dev
       REGISTRY_GHCR: ghcr.io/${{ github.repository_owner }}
+      # "true" sur push, "false" sur PR → utilisé dans le script bash
+      PUSH_IMAGES: ${{ github.event_name == 'push' }}
 
     permissions:
       contents: read
@@ -26,26 +32,34 @@ jobs:
         uses: actions/checkout@v4
 
       # ---------------------------
-      # LOGIN SCW
+      # LOGIN SCW (uniquement sur push)
       # ---------------------------
       - name: Log in to Scaleway Container Registry
+        if: github.event_name == 'push'
         run: |
           echo "${{ secrets.SCW_SECRET_KEY }}" \
             | docker login $REGISTRY_SCW -u "nologin" --password-stdin
 
       # ---------------------------
-      # LOGIN GHCR
+      # LOGIN GHCR (uniquement sur push)
       # ---------------------------
       - name: Log in to GHCR
+        if: github.event_name == 'push'
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" \
             | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Build & Push Docker images (full + slim)
+      - name: Build, test and optionally push Docker images (full + slim)
         env:
           GIT_BRANCH: ${{ github.ref_name }}
           GIT_SHA: ${{ github.sha }}
+          PUSH_IMAGES: ${{ env.PUSH_IMAGES }}
         run: |
+          set -euo pipefail
+
+          echo "Event: $GITHUB_EVENT_NAME"
+          echo "Will push images? $PUSH_IMAGES"
+
           # ---------------------------
           # Slug branch
           # ---------------------------
@@ -65,7 +79,6 @@ jobs:
           # ---------------------------
           # TAGGING COMMON
           # ---------------------------
-          # FULL
           TAG_FULL_SCW_BUILD="${IMAGE_SCW}:${BRANCH_SLUG}_${GIT_SHA}"
           TAG_FULL_SCW_BRANCH="${IMAGE_SCW}:${BRANCH_SLUG}"
           TAG_FULL_SCW_LATEST="${IMAGE_SCW}:latest"
@@ -74,7 +87,6 @@ jobs:
           TAG_FULL_GHCR_BRANCH="${IMAGE_GHCR}:${BRANCH_SLUG}"
           TAG_FULL_GHCR_LATEST="${IMAGE_GHCR}:latest"
 
-          # SLIM
           TAG_SLIM_SCW_BUILD="${IMAGE_SCW}:${BRANCH_SLUG}_${GIT_SHA}-slim"
           TAG_SLIM_SCW_BRANCH="${IMAGE_SCW}:${BRANCH_SLUG}-slim"
           TAG_SLIM_SCW_LATEST="${IMAGE_SCW}:slim"
@@ -83,7 +95,9 @@ jobs:
           TAG_SLIM_GHCR_BRANCH="${IMAGE_GHCR}:${BRANCH_SLUG}-slim"
           TAG_SLIM_GHCR_LATEST="${IMAGE_GHCR}:slim"
 
+          # ---------------------------
           # Optional cache
+          # ---------------------------
           docker pull "$TAG_FULL_SCW_LATEST" || true
           docker pull "$TAG_FULL_GHCR_LATEST" || true
           docker pull "$TAG_SLIM_SCW_LATEST" || true
@@ -119,14 +133,51 @@ jobs:
             -t "$TAG_SLIM_GHCR_LATEST" \
             -f Dockerfile.slim .
 
-          # ---------------------------
-          # PUSH SCW
-          # ---------------------------
-          echo "Pushing images to SCW..."
-          docker push "$IMAGE_SCW" --all-tags
+          # ============================================================
+          # TESTS SUR L’IMAGE FULL
+          # ============================================================
+          echo "Running php-fpm config test on FULL image..."
+          docker run --rm \
+            --entrypoint php-fpm \
+            "$TAG_FULL_SCW_BUILD" -t
+
+          echo "Checking PHP version / basic sanity on FULL image..."
+          docker run --rm \
+            --entrypoint php \
+            "$TAG_FULL_SCW_BUILD" -v
+
+          echo "Checking required PHP extensions on FULL image..."
+          docker run --rm \
+            --entrypoint php \
+            "$TAG_FULL_SCW_BUILD" -m | grep -E 'bcmath|gd|intl|mbstring|pcntl|pdo_mysql|zip|redis'
+
+          echo "Running healthcheck-liveness on FULL image..."
+          docker run --rm \
+            --entrypoint healthcheck-liveness \
+            "$TAG_FULL_SCW_BUILD"
+
+          # ============================================================
+          # (Optionnel) TESTS SUR L’IMAGE SLIM
+          # ============================================================
+          echo "Running php-fpm config test on SLIM image..."
+          docker run --rm \
+            --entrypoint php-fpm \
+            "$TAG_SLIM_SCW_BUILD" -t
+
+          echo "Running healthcheck-liveness on SLIM image..."
+          docker run --rm \
+            --entrypoint healthcheck-liveness \
+            "$TAG_SLIM_SCW_BUILD"
 
           # ---------------------------
-          # PUSH GHCR
+          # PUSH (UNIQUEMENT SUR PUSH)
           # ---------------------------
-          echo "Pushing images to GHCR..."
-          docker push "$IMAGE_GHCR" --all-tags
+          if [ "$PUSH_IMAGES" = "true" ]; then
+            echo "Pushing images to SCW..."
+            docker push "$IMAGE_SCW" --all-tags
+
+            echo "Pushing images to GHCR..."
+            docker push "$IMAGE_GHCR" --all-tags
+          else
+            echo "PR detected → skipping push to registries."
+          fi
