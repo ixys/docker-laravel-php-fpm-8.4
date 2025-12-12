@@ -42,7 +42,7 @@ jobs:
       - name: Log in to Scaleway Container Registry
         if: env.PUSH_IMAGES == 'true'
         run: |
-          echo "${{ secrets.SCW_SECRET_KEY }}" \
+          echo "${{ secrets.SCW_REGISTRY_PASSWORD }}" \
             | docker login $REGISTRY_SCW -u "nologin" --password-stdin
 
       # ---------------------------
