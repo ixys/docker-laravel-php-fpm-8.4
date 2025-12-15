@@ -1,4 +1,4 @@
-FROM php:8.2-fpm-alpine
+FROM php:8.4-fpm-alpine
 
 # ------------------------------ Meta / Args ------------------------------
 ARG BUILD_DATE
@@ -6,7 +6,7 @@ ARG VCS_REF
 ARG XDEBUG_VERSION
 
 LABEL maintainer="Julien SIMONCINI <julien@ixys.dev>" \
-      description="Container PHP 8.2 FPM based on Alpine with minimal runtime deps pour Laravel."
+      description="Container PHP 8.4 FPM based on Alpine with minimal runtime deps pour Laravel."
 
 SHELL ["/bin/ash", "-eo", "pipefail", "-c"]
 

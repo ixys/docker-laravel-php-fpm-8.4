@@ -1,23 +1,23 @@
-# PHP-FPM 8.2 – Alpine (Optimisé pour Laravel)
+# PHP-FPM 8.4 – Alpine (Optimisé pour Laravel)
 
-Cette image fournit un environnement PHP-FPM 8.2 léger, rapide et optimisé pour exécuter des applications Laravel en production.
+Cette image fournit un environnement PHP-FPM 8.4 léger, rapide et optimisé pour exécuter des applications Laravel en production.
 Elle est basée sur Alpine Linux, inclut Composer, Doppler, et un ensemble minimal mais complet de libs et extensions PHP nécessaires à Laravel.
 
 ## Installation
 
 Pour récupérer l’image depuis le registry Scaleway :
 ```bash
-docker pull rg.fr-par.scw.cloud/registry-par-ixys/containers/web/php-fpm-8.2:latest
+docker pull rg.fr-par.scw.cloud/registry-par-ixys/containers/web/php-fpm-8.4:latest
 ```
 
 Pour la version SLIM :
 ```bash
-docker pull rg.fr-par.scw.cloud/registry-par-ixys/containers/web/php-fpm-8.2:slim
+docker pull rg.fr-par.scw.cloud/registry-par-ixys/containers/web/php-fpm-8.4:slim
 ```
 
 ---
 ## Fonctionnalités principales
-- Base : php:8.2-fpm-alpine
+- Base : php:8.4-fpm-alpine
 - Image SLIM fortement allégée (aucune dépendance inutile en runtime)
 - Configuration PHP & FPM pré-intégrée via /config
 - Extensions PHP compatibles Laravel
@@ -79,7 +79,7 @@ doppler secrets download
 ## Utilisation locale
 
 ```bash
-docker run --rm -it   -v "$PWD":/app   -p 9000:9000   rg.fr-par.scw.cloud/registry-par-ixys/containers/web/php-fpm-8.2:latest
+docker run --rm -it   -v "$PWD":/app   -p 9000:9000   rg.fr-par.scw.cloud/registry-par-ixys/containers/web/php-fpm-8.4:latest
 ```
 
 ---

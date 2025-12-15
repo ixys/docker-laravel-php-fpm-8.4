@@ -3,4 +3,14 @@ set -eu
 
 # ----------------------------------------------------------------------------------------------------------------------
 
-healthcheck-fpm
+#!/bin/sh
+set -eu
+export FCGI_CONNECT="127.0.0.1:9000"
+
+if /usr/local/bin/healthcheck-fpm; then
+  exit 0
+else
+  RC=$?
+  echo "healthcheck-liveness: KO (exit code=${RC})" >&2
+  exit "$RC"
+fi

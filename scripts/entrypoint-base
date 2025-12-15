@@ -1,18 +1,21 @@
 #!/bin/sh
 set -eu
 
-# ----------------------------------------------------------------------------------------------------------------------
-
 echo "► Starting Main Entrypoint..."
 
-# --------------------------------------------------------------------------------------------------------------------
+# Bypass Doppler for healthchecks (never depend on secrets for liveness/readiness)
+case "${1:-}" in
+  healthcheck-liveness|healthcheck-readiness|php-fpm-healthcheck)
+    echo "► Bypassing Doppler for healthcheck. cmd: $*"
+    exec "$@"
+    ;;
+esac
 
-# Run Dockerfile's CMD (default: $> php-fpm )
-echo "► Starting application with doppler... cmd: ${@}"
-if [ -z "${DOPPLER_TOKEN+x}" ]; then
-  echo "Doppler token non défini. Commande exécutée sans Doppler."
+# Run Dockerfile's CMD (default: php-fpm)
+if [ -z "${DOPPLER_TOKEN:-}" ]; then
+  echo "Doppler token non défini. Commande exécutée sans Doppler. cmd: $*"
   exec "$@"
 else
-  # Pass the command and its arguments to doppler using `--` so they are not treated as a single string
+  echo "► Starting application with Doppler. cmd: $*"
   exec doppler run -- "$@"
 fi

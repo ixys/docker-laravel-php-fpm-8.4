@@ -1,4 +1,4 @@
-FROM php:8.2-fpm-alpine
+FROM php:8.4-fpm-alpine
 # with alpine 3.14 -> ERROR /bin/sh: Operation not permitted
 # uRequired Args ( inherited from start of file, or passed at bild )
 ARG BUILD_DATE
@@ -7,7 +7,7 @@ ARG XDEBUG_VERSION
 
 # Maintainer label
 LABEL Maintainer="Julien SIMONCINI <julien@ixys.dev>" \
-      Description="Container PHP 8.2 FPM based on Alpine 3.19 with default config."
+      Description="Container PHP 8.4 FPM based on Alpine with default config."
 
 # Set SHELL flags for RUN commands to allow -e and pipefail
 # Rationale: https://github.com/hadolint/hadolint/wiki/DL4006
@@ -53,58 +53,44 @@ RUN wget -q -t3 'https://packages.doppler.com/public/cli/rsa.8004D9FF50437357.ke
             zlib
 
 # ---------------------------------------- Install / Enable PHP Extensions ---------------------------------------------
-RUN apk update \
- && apk upgrade \
- && apk add --no-cache --virtual .build-deps \
-            $PHPIZE_DEPS \
-            bc \
-            bzip2-dev \
-            cyrus-sasl-dev \
-            freetds-dev \
-            freetype-dev \
-            icu-dev \
-            imagemagick-dev \
-            libc-dev \
-            libjpeg-turbo-dev \
-            libpng-dev \
-            libssh2-dev \
-            libwebp-dev \
-            libxml2-dev \
-            libxpm-dev \
-            libxslt-dev \
-            libzip-dev \
-            mysql-client \
-            oniguruma-dev \
-            openssl-dev \
-            pcre-dev \
-            tini \
-            yaml-dev \
-            zlib-dev
-
-RUN docker-php-ext-configure gd \
-            --enable-gd \
-            --with-webp \
-            --with-jpeg \
-            --with-xpm \
-            --with-freetype \
-            --enable-gd-jis-conv \
- && docker-php-ext-install -j$(nproc) gd ctype exif intl mysqli pcntl xml \
- # Install pdo_mysql
- && docker-php-ext-configure pdo_mysql --with-zlib-dir=/usr \
- && docker-php-ext-install -j$(nproc) pdo_mysql \
- # Install redis
- && pecl install redis \
- && docker-php-ext-enable redis \
- # Install zip
- && docker-php-ext-configure zip --with-zip \
- && docker-php-ext-install -j$(nproc) zip \
- # --------------------------------------------------------------------- \
- # CLEANING \
- && apk add --no-network --virtual .php-extensions-rundeps $runDeps \
- && docker-php-source delete \
- && apk del .build-deps \
- # && apk del --no-network .build-deps \
- && rm -rf /var/cache/apk/*
+RUN set -eux; \
+    apk add --no-cache --virtual .build-deps \
+        $PHPIZE_DEPS \
+        icu-dev \
+        freetype-dev \
+        libjpeg-turbo-dev \
+        libpng-dev \
+        libwebp-dev \
+        libxpm-dev \
+        libxml2-dev \
+        libzip-dev \
+        oniguruma-dev \
+        openssl-dev \
+        zlib-dev \
+        linux-headers \
+    ; \
+    docker-php-ext-configure gd \
+        --with-freetype \
+        --with-jpeg \
+        --with-webp \
+        --with-xpm \
+    ; \
+    docker-php-ext-install -j"$(nproc)" \
+        opcache gd intl mysqli pdo_mysql pcntl xml exif ctype zip \
+    ; \
+    pecl install redis; \
+    docker-php-ext-enable redis; \
+    runDeps="$( \
+      scanelf --needed --nobanner --format '%n#p' --recursive /usr/local/lib/php/extensions \
+        | tr ',' '\n' \
+        | awk -F'#' '{print $2}' \
+        | sort -u \
+        | xargs -r apk info --installed \
+        | sort -u \
+    )"; \
+    apk add --no-cache --virtual .php-ext-rundeps $runDeps; \
+    apk del .build-deps; \
+    rm -rf /var/cache/apk/*
 
 RUN set -eux \
 # Fix php.ini settings for enabled extensions
